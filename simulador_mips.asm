@@ -146,7 +146,7 @@ init_clr_loop:
     li      $t0, 0x7FFF
     sll     $t0, $t0, 16
     ori     $t0, $t0, 0xEFFC       # $t0 = 0x7FFFEFFC
-    sw      $t0, (IDX_SP*4)($s6)   # reg[29] = 0x7FFFEFFC
+    sw      $t0, 116($s6)   # reg[29] = 0x7FFFEFFC
 
     # Inicializar PC simulado = TEXT_BASE = 0x00400000
     li      $t0, TEXT_BASE
@@ -965,8 +965,8 @@ ca_fim:
 .data
 
 # ---- Nomes dos arquivos de entrada ----------------------------------------
-fname_bin:  .asciiz "ex-000-073.bin"
-fname_dat:  .asciiz "ex-000-073.dat"
+fname_bin:  .asciiz "C:/Users/SAMSUNG/Documents/T1-ORG---Simulador-de-Instru-es-MIPS/ex-000-073.bin"
+fname_dat:  .asciiz "C:/Users/SAMSUNG/Documents/T1-ORG---Simulador-de-Instru-es-MIPS/ex-000-073.dat"
 
 # ---- Segmentos de memória simulados (4 KB cada, alinhados em palavra) -----
         .align 2
