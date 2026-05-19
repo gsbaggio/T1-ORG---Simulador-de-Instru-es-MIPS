@@ -1,13 +1,11 @@
 #*******************************************************************************
 # Simulador de Instruções MIPS
-# Disciplina: ELC1011 – Organização de Computadores
-# Universidade Federal de Santa Maria – UFSM/CT/DELC
-# Prof. Giovani Baratto – 2026/1
+# Disciplina: ELC1011 - Organização de Computadores
 #
 # Descrição:
 #   Este programa simula a execução de um subconjunto de instruções MIPS.
 #   Ele carrega arquivos binários (.bin e .dat) nos segmentos de memória
-#   simulados e executa o ciclo Fetch–Decode–Execute em loop até encontrar
+#   simulados e executa o ciclo Fetch-Decode-Execute em loop até encontrar
 #   uma syscall de encerramento (exit=10 ou exit2=17).
 #
 # Instruções implementadas:
@@ -37,14 +35,8 @@
 #   $t8 : argumento de entrada para sim_to_host (endereço simulado)
 #   $t9 : usado para salvar endereço host antes de novo jal em exec_sw/exec_sb
 #*******************************************************************************
-#        1         2         3         4         5         6         7
-#234567890123456789012345678901234567890123456789012345678901234567890
 
-# ===========================================================================
-# Constantes declaradas com .eqv
-# ===========================================================================
-
-# Endereços-base dos segmentos de memória SIMULADOS
+# Endereços base dos segmentos de memória SIMULADOS
 .eqv  TEXT_BASE,   0x00400000   # Base do segmento de texto simulado
 .eqv  DATA_BASE,   0x10010000   # Base do segmento de dados simulado (SPIM/MARS)
 .eqv  STACK_TOP,   0x7FFFEFFC   # Topo inicial da pilha simulada
@@ -109,7 +101,7 @@
 .globl main
 
 ################################################################################
-# main – Procedimento principal do simulador
+# main - Procedimento principal do simulador
 ################################################################################
 main:
     # Salvar registradores do host que usaremos como dedicados
@@ -173,7 +165,7 @@ init_clr_loop:
     jal     carregar_arquivo
 
     # =========================================================================
-    # 3. Loop de Execução: Fetch – Decode – Execute
+    # 3. Loop de Execução: Fetch - Decode - Execute
     # =========================================================================
 exec_loop:
 
@@ -791,7 +783,7 @@ exec_sb:
 
 
 ################################################################################
-# get_reg – Lê o valor de um registrador simulado
+# get_reg - Lê o valor de um registrador simulado
 #
 # Argumentos:
 #   $a0 : índice do registrador (0..31)
@@ -810,7 +802,7 @@ get_reg_zero:
     jr      $ra
 
 ################################################################################
-# set_reg – Escreve em um registrador simulado
+# set_reg - Escreve em um registrador simulado
 #
 # Argumentos:
 #   $a0 : índice do registrador (0..31)
@@ -827,7 +819,7 @@ set_reg_done:
     jr      $ra
 
 ################################################################################
-# sim_to_host – Converte endereço MIPS simulado em endereço host
+# sim_to_host - Converte endereço MIPS simulado em endereço host
 #
 # Argumento de entrada  : $t8 = endereço simulado
 # Retorno               : $v0 = endereço host correspondente
@@ -890,7 +882,7 @@ sth_erro:
     jr      $ra
 
 ################################################################################
-# carregar_arquivo – Abre um arquivo e lê seus bytes para um buffer
+# carregar_arquivo - Abre um arquivo e lê seus bytes para um buffer
 #
 # Argumentos:
 #   $a0 : ponteiro para nome do arquivo
@@ -900,9 +892,9 @@ sth_erro:
 #   $v0 : bytes lidos (ou -1 se erro ao abrir)
 #
 # Syscalls:
-#   13 – open   ($a0=nome, $a1=flags=0, $a2=modo=0) -> $v0=fd
-#   14 – read   ($a0=fd, $a1=buffer, $a2=nbytes)    -> $v0=bytes_lidos
-#   16 – close  ($a0=fd)
+#   13 - open   ($a0=nome, $a1=flags=0, $a2=modo=0) -> $v0=fd
+#   14 - read   ($a0=fd, $a1=buffer, $a2=nbytes)    -> $v0=bytes_lidos
+#   16 - close  ($a0=fd)
 ################################################################################
 carregar_arquivo:
     addiu   $sp, $sp, -24
@@ -965,16 +957,16 @@ ca_fim:
 .data
 
 # ---- Nomes dos arquivos de entrada ----------------------------------------
-fname_bin:  .asciiz "C:/Users/SAMSUNG/Documents/T1-ORG---Simulador-de-Instru-es-MIPS/ex-000-073.bin"
-fname_dat:  .asciiz "C:/Users/SAMSUNG/Documents/T1-ORG---Simulador-de-Instru-es-MIPS/ex-000-073.dat"
+fname_bin:  .asciiz "ex-000-073.bin"
+fname_dat:  .asciiz "ex-000-073.dat"
 
 # ---- Segmentos de memória simulados (4 KB cada, alinhados em palavra) -----
         .align 2
-mem_text:   .space  4096        # texto  – instruções do programa simulado
+mem_text:   .space  4096        # texto  - instruções do programa simulado
         .align 2
-mem_data:   .space  4096        # dados  – variáveis estáticas
+mem_data:   .space  4096        # dados  - variáveis estáticas
         .align 2
-mem_stack:  .space  4096        # pilha  – cresce para endereços menores
+mem_stack:  .space  4096        # pilha  - cresce para endereços menores
 
 # ---- Banco de registradores simulados: 32 x 4 bytes -----------------------
         .align 2
