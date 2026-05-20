@@ -9,10 +9,9 @@
 #   uma syscall de encerramento (exit=10 ou exit2=17).
 #
 # Instruções implementadas:
-#   R-type (opcode=0): add, addu, sub, subu, and, or, slt, sll, srl, jr,
-#                      jalr, syscall
-#   I-type: addi, addiu, andi, ori, lui, lw, sw, lbu, lb, sb, beq, bne, slti
-#   J-type: j, jal
+#   R-type (opcode=0): Vadd, Vaddu, Vsub, Vsubu, Vand, Vor, Vsll, Vsrl, Vjr, Vsyscall
+#   I-type: Vaddi, addiu, Vandi, Vori, lui, Vlw, Vsw, lbu, lb, sb, Vbeq, Vbne, slti
+#   J-type: Vj, jal
 #
 # Estrutura da memória simulada (4096 bytes cada segmento):
 #   mem_text  : segmento de texto,  base simulada = TEXT_BASE  (0x00400000)
@@ -86,7 +85,6 @@
 .eqv  FUNCT_SLL,     0
 .eqv  FUNCT_SRL,     2
 .eqv  FUNCT_JR,      8
-.eqv  FUNCT_JALR,    9
 .eqv  FUNCT_SYSCALL, 12
 .eqv  FUNCT_ADD,     32
 .eqv  FUNCT_ADDU,    33
@@ -94,7 +92,6 @@
 .eqv  FUNCT_SUBU,    35
 .eqv  FUNCT_AND,     36
 .eqv  FUNCT_OR,      37
-.eqv  FUNCT_SLT,     42
 
 # ===========================================================================
 .text
@@ -278,7 +275,6 @@ exec_rtype:
     beq     $t0, FUNCT_SLL,     exec_sll
     beq     $t0, FUNCT_SRL,     exec_srl
     beq     $t0, FUNCT_JR,      exec_jr
-    beq     $t0, FUNCT_JALR,    exec_jalr
     beq     $t0, FUNCT_SYSCALL, exec_syscall
     beq     $t0, FUNCT_ADD,     exec_add
     beq     $t0, FUNCT_ADDU,    exec_addu
@@ -286,7 +282,6 @@ exec_rtype:
     beq     $t0, FUNCT_SUBU,    exec_subu
     beq     $t0, FUNCT_AND,     exec_and
     beq     $t0, FUNCT_OR,      exec_or
-    beq     $t0, FUNCT_SLT,     exec_slt
 
     # Funct não reconhecido
     la      $a0, msg_unk_funct
@@ -334,21 +329,6 @@ exec_srl:
     # jr rs               : PC = reg[rs]
     # -------------------------------------------------------------------------
 exec_jr:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rs]
-    sw      $v0, 0($s7)         # PC = reg[rs]
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # jalr rd, rs         : reg[rd] = PC;  PC = reg[rs]
-    # -------------------------------------------------------------------------
-exec_jalr:
-    lw      $t9, 0($s7)         # $t9 = PC atual (endereço de retorno)
-    la      $t0, f_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t9
-    jal     set_reg             # reg[rd] = PC
     la      $t0, f_rs
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rs]
@@ -507,24 +487,6 @@ exec_or:
     lw      $a0, 0($t0)
     jal     get_reg
     or      $t1, $t1, $v0
-    la      $t0, f_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # slt rd, rs, rt      : reg[rd] = (reg[rs] < reg[rt]) ? 1 : 0
-    # -------------------------------------------------------------------------
-exec_slt:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    slt     $t1, $t1, $v0
     la      $t0, f_rd
     lw      $a0, 0($t0)
     move    $a1, $t1
