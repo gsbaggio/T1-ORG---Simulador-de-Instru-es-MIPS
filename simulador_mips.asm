@@ -1,26 +1,28 @@
 #*******************************************************************************
 # Simulador de Instruções MIPS
 # Disciplina: ELC1011 - Organização de Computadores
+# Grupo: Gabriel Souza Baggio e Gabriel Stiegemeier
 #
 # Descrição:
 #   Este programa simula a execução de um subconjunto de instruções MIPS.
 #   Ele carrega arquivos binários (.bin e .dat) nos segmentos de memória
 #   simulados e executa o ciclo Fetch-Decode-Execute em loop até encontrar
-#   uma syscall de encerramento (exit=10 ou exit2=17).
+#   uma syscall de encerramento.
 #
 # Instruções implementadas:
-#   R-type (opcode=0): Vadd, Vaddu, Vsub, Vsubu, Vand, Vor, Vsll, Vsrl, Vjr, Vsyscall
-#   I-type: Vaddi, addiu, Vandi, Vori, lui, Vlw, Vsw, lbu, lb, sb, Vbeq, Vbne, slti
-#   J-type: Vj, jal
+#   R-type: addu, subu, jr, syscall
+#   I-type: addiu, ori, lui, lw, sw, lbu, sb, beq, bne
+#   J-type: j, jal
+#   ->     (15) Instruções no Total
 #
 # Estrutura da memória simulada (4096 bytes cada segmento):
-#   mem_text  : segmento de texto,  base simulada = TEXT_BASE  (0x00400000)
-#   mem_data  : segmento de dados,  base simulada = DATA_BASE  (0x10010000)
-#   mem_stack : segmento de pilha,  base simulada = STACK_TOP  (0x7FFFEFFC)
+#   mem_text  : segmento de texto TEXT_BASE  (0x00400000)
+#   mem_data  : segmento de dados DATA_BASE  (0x10010000)
+#   mem_stack : segmento de pilha STACK_TOP  (0x7FFFEFFC)
 #
 # Registradores simulados:
-#   reg[0..31] : banco de 32 registradores de 32 bits (reg[0] sempre vale 0)
-#   PC         : Program Counter  (32 bits)
+#   reg[0-31]  : 32 registradores de 32 bits
+#   PC         : Program Counter (32 bits)
 #   IR         : Instruction Register (32 bits)
 #
 # Campos das instruções decodificadas (variáveis de 32 bits):
@@ -69,29 +71,19 @@
 .eqv  OP_JAL,    3
 .eqv  OP_BEQ,    4
 .eqv  OP_BNE,    5
-.eqv  OP_ADDI,   8
 .eqv  OP_ADDIU,  9
-.eqv  OP_SLTI,   10
-.eqv  OP_ANDI,   12
 .eqv  OP_ORI,    13
 .eqv  OP_LUI,    15
-.eqv  OP_LB,     32
 .eqv  OP_LW,     35
 .eqv  OP_LBU,    36
 .eqv  OP_SB,     40
 .eqv  OP_SW,     43
 
 # Functs R-type
-.eqv  FUNCT_SLL,     0
-.eqv  FUNCT_SRL,     2
 .eqv  FUNCT_JR,      8
 .eqv  FUNCT_SYSCALL, 12
-.eqv  FUNCT_ADD,     32
 .eqv  FUNCT_ADDU,    33
-.eqv  FUNCT_SUB,     34
 .eqv  FUNCT_SUBU,    35
-.eqv  FUNCT_AND,     36
-.eqv  FUNCT_OR,      37
 
 # ===========================================================================
 .text
@@ -247,13 +239,9 @@ exec_loop:
     beq     $t0, OP_JAL,    exec_jal
     beq     $t0, OP_BEQ,    exec_beq
     beq     $t0, OP_BNE,    exec_bne
-    beq     $t0, OP_ADDI,   exec_addi
     beq     $t0, OP_ADDIU,  exec_addiu
-    beq     $t0, OP_SLTI,   exec_slti
-    beq     $t0, OP_ANDI,   exec_andi
     beq     $t0, OP_ORI,    exec_ori
     beq     $t0, OP_LUI,    exec_lui
-    beq     $t0, OP_LB,     exec_lb
     beq     $t0, OP_LW,     exec_lw
     beq     $t0, OP_LBU,    exec_lbu
     beq     $t0, OP_SB,     exec_sb
@@ -272,16 +260,10 @@ exec_rtype:
     la      $t0, f_funct
     lw      $t0, 0($t0)             # $t0 = funct
 
-    beq     $t0, FUNCT_SLL,     exec_sll
-    beq     $t0, FUNCT_SRL,     exec_srl
     beq     $t0, FUNCT_JR,      exec_jr
     beq     $t0, FUNCT_SYSCALL, exec_syscall
-    beq     $t0, FUNCT_ADD,     exec_add
     beq     $t0, FUNCT_ADDU,    exec_addu
-    beq     $t0, FUNCT_SUB,     exec_sub
     beq     $t0, FUNCT_SUBU,    exec_subu
-    beq     $t0, FUNCT_AND,     exec_and
-    beq     $t0, FUNCT_OR,      exec_or
 
     # Funct não reconhecido
     la      $a0, msg_unk_funct
@@ -292,38 +274,6 @@ exec_rtype:
     # =========================================================================
     # Implementação individual de cada instrução
     # =========================================================================
-
-    # -------------------------------------------------------------------------
-    # sll rd, rt, shamt   : reg[rd] = reg[rt] << shamt
-    # -------------------------------------------------------------------------
-exec_sll:
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rt]
-    la      $t0, f_shamt
-    lw      $t1, 0($t0)
-    sllv    $t0, $v0, $t1       # sllv: desloca $v0 por $t1 posições
-    la      $t1, f_rd
-    lw      $a0, 0($t1)
-    move    $a1, $t0
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # srl rd, rt, shamt   : reg[rd] = reg[rt] >> shamt  (lógico)
-    # -------------------------------------------------------------------------
-exec_srl:
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, f_shamt
-    lw      $t1, 0($t0)
-    srlv    $t0, $v0, $t1
-    la      $t1, f_rd
-    lw      $a0, 0($t1)
-    move    $a1, $t0
-    jal     set_reg
-    j       exec_loop
 
     # -------------------------------------------------------------------------
     # jr rs               : PC = reg[rs]
@@ -420,9 +370,8 @@ svc_exit2:
     syscall
 
     # -------------------------------------------------------------------------
-    # add / addu rd, rs, rt : reg[rd] = reg[rs] + reg[rt]
+    # addu rd, rs, rt : reg[rd] = reg[rs] + reg[rt]
     # -------------------------------------------------------------------------
-exec_add:
 exec_addu:
     la      $t0, f_rs
     lw      $a0, 0($t0)
@@ -439,9 +388,8 @@ exec_addu:
     j       exec_loop
 
     # -------------------------------------------------------------------------
-    # sub / subu rd, rs, rt : reg[rd] = reg[rs] - reg[rt]
+    # subu rd, rs, rt : reg[rd] = reg[rs] - reg[rt]
     # -------------------------------------------------------------------------
-exec_sub:
 exec_subu:
     la      $t0, f_rs
     lw      $a0, 0($t0)
@@ -451,42 +399,6 @@ exec_subu:
     lw      $a0, 0($t0)
     jal     get_reg
     subu    $t1, $t1, $v0
-    la      $t0, f_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # and rd, rs, rt      : reg[rd] = reg[rs] & reg[rt]
-    # -------------------------------------------------------------------------
-exec_and:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    and     $t1, $t1, $v0
-    la      $t0, f_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # or rd, rs, rt       : reg[rd] = reg[rs] | reg[rt]
-    # -------------------------------------------------------------------------
-exec_or:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    or      $t1, $t1, $v0
     la      $t0, f_rd
     lw      $a0, 0($t0)
     move    $a1, $t1
@@ -572,9 +484,8 @@ exec_bne:
     j       exec_loop
 
     # -------------------------------------------------------------------------
-    # addi / addiu rt, rs, imm : reg[rt] = reg[rs] + sign_ext(imm)
+    # addiu rt, rs, imm : reg[rt] = reg[rs] + sign_ext(imm)
     # -------------------------------------------------------------------------
-exec_addi:
 exec_addiu:
     la      $t0, f_rs
     lw      $a0, 0($t0)
@@ -582,40 +493,6 @@ exec_addiu:
     la      $t0, f_imm
     lw      $t1, 0($t0)         # $t1 = imm (extensão de sinal já feita no decode)
     addu    $t1, $v0, $t1
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # slti rt, rs, imm    : reg[rt] = (reg[rs] < sign_ext(imm)) ? 1 : 0
-    # -------------------------------------------------------------------------
-exec_slti:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, f_imm
-    lw      $t1, 0($t0)
-    slt     $t1, $v0, $t1
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # andi rt, rs, imm    : reg[rt] = reg[rs] & zero_ext(imm)
-    # (imm é tratado como zero-extendido: os 16 bits superiores são 0)
-    # -------------------------------------------------------------------------
-exec_andi:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, f_imm
-    lw      $t1, 0($t0)
-    andi    $t1, $t1, 0xFFFF    # forçar zero-extension (apagar bits altos)
-    and     $t1, $v0, $t1
     la      $t0, f_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
@@ -665,24 +542,6 @@ exec_lw:
     addu    $t8, $v0, $t1       # $t8 = endereço simulado
     jal     sim_to_host         # $v0 = endereço host
     lw      $t1, 0($v0)
-    la      $t0, f_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
-
-    # -------------------------------------------------------------------------
-    # lb rt, imm(rs)      : reg[rt] = sign_ext(Mem8[reg[rs] + imm])
-    # -------------------------------------------------------------------------
-exec_lb:
-    la      $t0, f_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, f_imm
-    lw      $t1, 0($t0)
-    addu    $t8, $v0, $t1
-    jal     sim_to_host
-    lb      $t1, 0($v0)         # lb faz extensão de sinal automaticamente
     la      $t0, f_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
