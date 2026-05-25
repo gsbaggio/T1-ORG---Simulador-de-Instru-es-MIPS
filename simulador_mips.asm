@@ -1,4 +1,4 @@
-#*******************************************************************************
+################################################################
 # Simulador de Instruções MIPS
 # Disciplina: ELC1011 - Organização de Computadores
 # Grupo: Gabriel Souza Baggio e Gabriel Stiegemeier
@@ -26,37 +26,39 @@
 #   IR         : Instruction Register (32 bits)
 #
 # Campos das instruções decodificadas (variáveis de 32 bits):
-#   f_opcode, f_rs, f_rt, f_rd, f_shamt, f_funct, f_imm, f_addr
+#   inst_opcode, inst_rs, inst_rt, inst_rd, inst_shamt, inst_funct, inst_imm, inst_addr
 #
 # Convenção de registradores do simulador (host):
 #   $s6 : endereço host de reg[0] (base do banco de registradores simulados)
 #   $s7 : endereço host de PC
-#   $t0-$t9, $a0-$a3, $v0-$v1 : usados livremente dentro de cada bloco
+#   $t0-$t7, $a0-$a3, $v0-$v1 : usados livremente dentro de cada bloco
 #   $ra : salvo/restaurado nos procedimentos que chamam outros via jal
-#   $t8 : argumento de entrada para sim_to_host (endereço simulado)
+#   $t8 : argumento de entrada para 'transfere_sim_para_host' (endereço simulado)
 #   $t9 : usado para salvar endereço host antes de novo jal em exec_sw/exec_sb
-#*******************************************************************************
+##############################################################
 
-# Endereços base dos segmentos de memória SIMULADOS
+################################
+# Diretrizes .eqv para o código
+###############################
+
+# Endereços base dos segmentos de memória simulados
 .eqv  TEXT_BASE,   0x00400000   # Base do segmento de texto simulado
-.eqv  DATA_BASE,   0x10010000   # Base do segmento de dados simulado (SPIM/MARS)
+.eqv  DATA_BASE,   0x10010000   # Base do segmento de dados simulado
 .eqv  STACK_TOP,   0x7FFFEFFC   # Topo inicial da pilha simulada
 
-# Tamanho de cada segmento de memória simulado (em bytes)
+# Tamanho de cada segmento de memória (em bytes)
 .eqv  MEM_SIZE,    4096
 
 # Número de registradores simulados
 .eqv  NUM_REGS,    32
 
-# Índices de registradores MIPS especiais (usados por get_reg / set_reg)
-.eqv  IDX_ZERO,    0            # $zero
-.eqv  IDX_V0,      2            # $v0 (código de syscall / retorno)
-.eqv  IDX_A0,      4            # $a0 (1o argumento)
-.eqv  IDX_A1,      5            # $a1 (2o argumento)
-.eqv  IDX_SP,      29           # $sp (stack pointer)
+# Índices de registradores especiais (usados por get_reg/set_reg)
+.eqv  IDX_V0,      2            # $v0 (código de syscall/retorno)
+.eqv  IDX_A0,      4            # $a0 (primeiro argumento)
+.eqv  IDX_A1,      5            # $a1 (segundo argumento)
 .eqv  IDX_RA,      31           # $ra (return address)
 
-# Códigos de syscall do programa MIPS simulado
+# Códigos de syscall
 .eqv  SVC_PRINT_INT,    1
 .eqv  SVC_PRINT_STR,    4
 .eqv  SVC_READ_INT,     5
@@ -65,7 +67,7 @@
 .eqv  SVC_PRINT_CHAR,   11
 .eqv  SVC_EXIT2,        17
 
-# Opcodes MIPS
+# Opcodes
 .eqv  OP_RTYPE,  0
 .eqv  OP_J,      2
 .eqv  OP_JAL,    3
@@ -85,154 +87,142 @@
 .eqv  FUNCT_ADDU,    33
 .eqv  FUNCT_SUBU,    35
 
-# ===========================================================================
+#######################################
 .text
 .globl main
 
-################################################################################
-# main - Procedimento principal do simulador
-################################################################################
+########################################
+# Procedimento principal do simulador
+########################################
 main:
     # Salvar registradores do host que usaremos como dedicados
-    addiu   $sp, $sp, -12
-    sw      $ra, 8($sp)
-    sw      $s6, 4($sp)
-    sw      $s7, 0($sp)
+    addiu $sp, $sp, -12
+    sw $ra, 8($sp)
+    sw $s6, 4($sp)
+    sw $s7, 0($sp)
 
-    # -------------------------------------------------------------------------
-    # Fixar ponteiros dedicados para as estruturas principais
-    #   $s6 = endereço host de reg[0]
-    #   $s7 = endereço host de PC
-    # Esses dois registradores nunca são sobrescritos pelo restante do código.
-    # -------------------------------------------------------------------------
-    la      $s6, reg
-    la      $s7, PC
+    # Esses dois registradores nunca são sobrescritos pelo restante do código:
+    la $s6, reg # $s6 = endereço host de reg[0]
+    la $s7, PC # $s7 = endereço host de PC
 
-    # =========================================================================
+    ############################################
     # 1. Inicialização das estruturas simuladas
-    # =========================================================================
+    ############################################
 
-    # Zerar todos os registradores simulados reg[0..31]
-    move    $t0, $s6            # $t0 = ponteiro corrente (começa em reg[0])
-    li      $t1, NUM_REGS       # contador de 32 iterações
-init_clr_loop:
-    sw      $zero, 0($t0)
-    addiu   $t0, $t0, 4
-    addiu   $t1, $t1, -1
-    bgtz    $t1, init_clr_loop
+    # Zerar todos os registradores simulados reg[0-31]
+    move $t0, $s6            # $t0 = ponteiro corrente (começa em reg[0])
+    li $t1, NUM_REGS         # contador de 32 iterações
+limpar_regs_loop:
+    sw $zero, 0($t0)
+    addiu $t0, $t0, 4
+    addiu $t1, $t1, -1
+    bgtz $t1, limpar_regs_loop
 
-    # Inicializar reg[29] ($sp simulado) = STACK_TOP = 0x7FFFEFFC
-    # Construímos 0x7FFFEFFC explicitamente (li sozinho pode não funcionar com
-    # valores > 0x7FFFFFFF em algumas versões do montador)
-    li      $t0, 0x7FFF
-    sll     $t0, $t0, 16
-    ori     $t0, $t0, 0xEFFC       # $t0 = 0x7FFFEFFC
-    sw      $t0, 116($s6)   # reg[29] = 0x7FFFEFFC
+    # Inicializar reg[29] (STACK_TOP = 0x7FFFEFFC)
+    # Poderia ser feito com 'lui' + 'ori', mas utilizando 'li' permite eu utilizar o '.eqv' que define o STACK_TOP
+    li $t0, STACK_TOP
+    sw $t0, 116($s6)   # 29 * 4 = 116 (reg[29] = STACK_TOP)
 
-    # Inicializar PC simulado = TEXT_BASE = 0x00400000
-    li      $t0, TEXT_BASE
-    sw      $t0, 0($s7)
+    # Inicializar PC simulado (TEXT_BASE = 0x00400000)
+    li $t0, TEXT_BASE
+    sw $t0, 0($s7)
 
     # Inicializar IR = 0
-    la      $t0, IR
-    sw      $zero, 0($t0)
+    la $t0, IR
+    sw $zero, 0($t0)
 
-    # =========================================================================
+    ###############################################################
     # 2. Carregamento dos arquivos binários nos segmentos simulados
-    # =========================================================================
+    ###############################################################
 
-    # Ler arquivo .bin -> mem_text
-    la      $a0, fname_bin
-    la      $a1, mem_text
-    li      $a2, MEM_SIZE
-    jal     carregar_arquivo
+    # Ler arquivo '.bin' para 'mem_text'
+    la $a0, arquivo_bin
+    la  $a1, mem_text
+    li $a2, MEM_SIZE
+    jal carregar_arquivo
 
-    # Ler arquivo .dat -> mem_data
-    la      $a0, fname_dat
-    la      $a1, mem_data
-    li      $a2, MEM_SIZE
-    jal     carregar_arquivo
+    # Ler arquivo '.dat' para 'mem_data'
+    la $a0, arquivo_dat
+    la $a1, mem_data
+    li $a2, MEM_SIZE
+    jal carregar_arquivo
 
-    # =========================================================================
-    # 3. Loop de Execução: Fetch - Decode - Execute
-    # =========================================================================
+    #########################################################
+    # 3. Loop Principal de Execução: Fetch - Decode - Execute
+    #########################################################
 exec_loop:
 
-    # -------------------------------------------------------------------------
-    # (a) Busca (FETCH): IR <- Mem[PC]
-    # -------------------------------------------------------------------------
-    lw      $t0, 0($s7)             # $t0 = PC simulado
-    li      $t1, TEXT_BASE
-    subu    $t1, $t0, $t1           # $t1 = offset dentro de mem_text
-    la      $t2, mem_text
-    addu    $t2, $t2, $t1           # $t2 = endereço host da instrução
-    lw      $t3, 0($t2)             # $t3 = instrução (conteúdo de IR)
-    la      $t4, IR
-    sw      $t3, 0($t4)             # IR = instrução buscada
+    # Busca (FETCH): Mem[PC] -> IR
+exec_fetch:
+    lw $t0, 0($s7)             # $t0 = PC simulado
+    li $t1, TEXT_BASE          # TEXT_BASE = 0x00400000
+    subu $t1, $t0, $t1         # $t1 = offset dentro de mem_text
+    la $t2, mem_text
+    addu $t2, $t2, $t1         # $t2 = endereço host da instrução
+    lw $t3, 0($t2)             # $t3 = instrução (conteúdo de IR)
+    la $t4, IR                 # Carrega endereço de IR
+    sw $t3, 0($t4)             # Salva a instrução de $t3 para o endereço do IR
 
-    # -------------------------------------------------------------------------
-    # (b) Decodificação (DECODE): extrair campos e incrementar PC
-    # -------------------------------------------------------------------------
-
-    # PC <- PC + 4
-    addiu   $t0, $t0, 4
-    sw      $t0, 0($s7)
+    # Decodificação (DECODE): extrair campos de IR e incrementar PC
+exec_decode:
+    # PC = PC + 4
+    addiu $t0, $t0, 4
+    sw $t0, 0($s7)
 
     # Extrair todos os campos a partir de $t3 (IR)
 
-    # opcode = IR[31:26]
-    srl     $t4, $t3, 26
-    andi    $t4, $t4, 0x3F
-    la      $t0, f_opcode
-    sw      $t4, 0($t0)
+    # opcode = IR[31-26]
+    srl $t4, $t3, 26            # Desloca para direita, para sobrar só OP
+    andi $t4, $t4, 0x3F         # 0x3F = 0011 1111 (máscara pra manter os 6 primeiros)
+    la $t0, inst_opcode
+    sw $t4, 0($t0)
 
-    # rs = IR[25:21]
-    srl     $t4, $t3, 21
-    andi    $t4, $t4, 0x1F
-    la      $t0, f_rs
-    sw      $t4, 0($t0)
+    # rs = IR[25-21]
+    srl $t4, $t3, 21            # Desloca para direita, sobrando os bits mais significativos
+    andi $t4, $t4, 0x1F         # 0x1F = 0001 1111 (faz sobrar só 5 bits)
+    la $t0, inst_rs
+    sw $t4, 0($t0)
 
-    # rt = IR[20:16]
-    srl     $t4, $t3, 16
-    andi    $t4, $t4, 0x1F
-    la      $t0, f_rt
-    sw      $t4, 0($t0)
+    # rt = IR[20-16]
+    srl $t4, $t3, 16            # Mesma lógica dos 2 primeiros campos
+    andi $t4, $t4, 0x1F
+    la $t0, inst_rt
+    sw $t4, 0($t0)
 
-    # rd = IR[15:11]
-    srl     $t4, $t3, 11
-    andi    $t4, $t4, 0x1F
-    la      $t0, f_rd
-    sw      $t4, 0($t0)
+    # rd = IR[15-11]
+    srl $t4, $t3, 11           # Mesma lógica dos 2 primeiros campos
+    andi $t4, $t4, 0x1F
+    la $t0, inst_rd
+    sw $t4, 0($t0)
 
-    # shamt = IR[10:6]
-    srl     $t4, $t3, 6
-    andi    $t4, $t4, 0x1F
-    la      $t0, f_shamt
-    sw      $t4, 0($t0)
+    # shamt = IR[10-6]
+    srl $t4, $t3, 6            # Mesma lógica dos 2 primeiros campos
+    andi $t4, $t4, 0x1F
+    la $t0, inst_shamt
+    sw  $t4, 0($t0)
 
-    # funct = IR[5:0]
-    andi    $t4, $t3, 0x3F
-    la      $t0, f_funct
-    sw      $t4, 0($t0)
+    # funct = IR[5-0]
+    andi $t4, $t3, 0x3F         # Só precisa fazer o 'andi' com 5 bits menos significativos
+    la $t0, inst_funct
+    sw $t4, 0($t0)
 
-    # immediate = IR[15:0] com extensão de sinal
+    # immediate = IR[15-0] com extensão de sinal
     # Técnica: mover para bits [31:16] e depois deslocar com sinal
-    sll     $t4, $t3, 16
-    sra     $t4, $t4, 16
-    la      $t0, f_imm
-    sw      $t4, 0($t0)
+    sll $t4, $t3, 16 
+    sra $t4, $t4, 16            # Precisa fazer assim para a extensão de sinal dos 16 bits mais significativos
+    la $t0, inst_imm
+    sw $t4, 0($t0)
 
-    # address = IR[25:0]  (J-type, 26 bits sem sinal)
-    li      $t0, 0x03FFFFFF
-    and     $t4, $t3, $t0
-    la      $t0, f_addr
-    sw      $t4, 0($t0)
+    # address = IR[25-0]  (J-type, 26 bits sem sinal)
+    li $t0, 0x03FFFFFF         # Não da pra fazer só com 'andi' pois é maior que 16 bits (não cabe no imm)
+    and $t4, $t3, $t0
+    la $t0, inst_addr
+    sw $t4, 0($t0)
 
-    # -------------------------------------------------------------------------
-    # (c) Execução (EXECUTE): despachar pelo opcode
-    # -------------------------------------------------------------------------
-    la      $t0, f_opcode
-    lw      $t0, 0($t0)             # $t0 = opcode
+    # Execução (EXECUTE): despachar pelo opcode
+exec_execute:
+    la $t0, inst_opcode
+    lw $t0, 0($t0)             # $t0 = opcode
 
     beq     $t0, OP_RTYPE,  exec_rtype
     beq     $t0, OP_J,      exec_j
@@ -248,7 +238,7 @@ exec_loop:
     beq     $t0, OP_SW,     exec_sw
 
     # Opcode não reconhecido: imprimir aviso e continuar
-    la      $a0, msg_unk_op
+    la      $a0, msg_opcode_desconhecido
     li      $v0, 4
     syscall
     j       exec_loop
@@ -257,7 +247,7 @@ exec_loop:
     # R-type: despachar pelo campo funct
     # =========================================================================
 exec_rtype:
-    la      $t0, f_funct
+    la      $t0, inst_funct
     lw      $t0, 0($t0)             # $t0 = funct
 
     beq     $t0, FUNCT_JR,      exec_jr
@@ -279,7 +269,7 @@ exec_rtype:
     # jr rs               : PC = reg[rs]
     # -------------------------------------------------------------------------
 exec_jr:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rs]
     sw      $v0, 0($s7)         # PC = reg[rs]
@@ -317,7 +307,7 @@ svc_print_str:
     li      $a0, IDX_A0
     jal     get_reg             # $v0 = endereço simulado da string
     move    $t8, $v0
-    jal     sim_to_host         # $v0 = endereço host
+    jal     transfere_sim_para_host         # $v0 = endereço host
     move    $a0, $v0
     li      $v0, 4
     syscall
@@ -337,7 +327,7 @@ svc_read_str:
     li      $a0, IDX_A0
     jal     get_reg
     move    $t8, $v0
-    jal     sim_to_host
+    jal     transfere_sim_para_host
     move    $t9, $v0            # $t9 = endereço host do buffer
     li      $a0, IDX_A1
     jal     get_reg             # $v0 = tamanho (reg[5])
@@ -373,15 +363,15 @@ svc_exit2:
     # addu rd, rs, rt : reg[rd] = reg[rs] + reg[rt]
     # -------------------------------------------------------------------------
 exec_addu:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
     move    $t1, $v0            # $t1 = reg[rs]
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rt]
     addu    $t1, $t1, $v0
-    la      $t0, f_rd
+    la      $t0, inst_rd
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -391,15 +381,15 @@ exec_addu:
     # subu rd, rs, rt : reg[rd] = reg[rs] - reg[rt]
     # -------------------------------------------------------------------------
 exec_subu:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
     move    $t1, $v0
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg
     subu    $t1, $t1, $v0
-    la      $t0, f_rd
+    la      $t0, inst_rd
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -411,7 +401,7 @@ exec_subu:
     # os 4 bits superiores (conforme especificação MIPS).
     # -------------------------------------------------------------------------
 exec_j:
-    la      $t0, f_addr
+    la      $t0, inst_addr
     lw      $t0, 0($t0)         # $t0 = campo target (26 bits)
     sll     $t0, $t0, 2         # $t0 = target * 4
     lw      $t1, 0($s7)         # $t1 = PC (após incremento)
@@ -432,7 +422,7 @@ exec_jal:
     jal     set_reg             # reg[31] = endereço de retorno
 
     # 2. Calcular endereço de desvio (mesmo cálculo que j)
-    la      $t0, f_addr
+    la      $t0, inst_addr
     lw      $t0, 0($t0)         # $t0 = target (26 bits)
     sll     $t0, $t0, 2
     lw      $t1, 0($s7)         # PC atual (depois de set_reg, s7 não mudou)
@@ -446,16 +436,16 @@ exec_jal:
     # beq rs, rt, offset  : if (reg[rs] == reg[rt]) PC = PC + (offset << 2)
     # -------------------------------------------------------------------------
 exec_beq:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
     move    $t1, $v0            # $t1 = reg[rs]
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rt]
     bne     $t1, $v0, exec_loop # condição falsa: sem branch
     # Branch tomado
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t0, 0($t0)         # $t0 = offset com sinal
     sll     $t0, $t0, 2
     lw      $t1, 0($s7)
@@ -467,15 +457,15 @@ exec_beq:
     # bne rs, rt, offset  : if (reg[rs] != reg[rt]) PC = PC + (offset << 2)
     # -------------------------------------------------------------------------
 exec_bne:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
     move    $t1, $v0
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg
     beq     $t1, $v0, exec_loop # condição falsa: sem branch
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t0, 0($t0)
     sll     $t0, $t0, 2
     lw      $t1, 0($s7)
@@ -487,13 +477,13 @@ exec_bne:
     # addiu rt, rs, imm : reg[rt] = reg[rs] + sign_ext(imm)
     # -------------------------------------------------------------------------
 exec_addiu:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rs]
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)         # $t1 = imm (extensão de sinal já feita no decode)
     addu    $t1, $v0, $t1
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -503,14 +493,14 @@ exec_addiu:
     # ori rt, rs, imm     : reg[rt] = reg[rs] | zero_ext(imm)
     # -------------------------------------------------------------------------
 exec_ori:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     andi    $t1, $t1, 0xFFFF    # zero-extension
     or      $t1, $v0, $t1
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -520,11 +510,11 @@ exec_ori:
     # lui rt, imm         : reg[rt] = imm << 16
     # -------------------------------------------------------------------------
 exec_lui:
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     andi    $t1, $t1, 0xFFFF
     sll     $t1, $t1, 16
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -534,15 +524,15 @@ exec_lui:
     # lw rt, imm(rs)      : reg[rt] = Mem32[reg[rs] + imm]
     # -------------------------------------------------------------------------
 exec_lw:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     addu    $t8, $v0, $t1       # $t8 = endereço simulado
-    jal     sim_to_host         # $v0 = endereço host
+    jal     transfere_sim_para_host         # $v0 = endereço host
     lw      $t1, 0($v0)
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -552,15 +542,15 @@ exec_lw:
     # lbu rt, imm(rs)     : reg[rt] = zero_ext(Mem8[reg[rs] + imm])
     # -------------------------------------------------------------------------
 exec_lbu:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     addu    $t8, $v0, $t1
-    jal     sim_to_host
+    jal     transfere_sim_para_host
     lbu     $t1, 0($v0)
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     move    $a1, $t1
     jal     set_reg
@@ -570,15 +560,15 @@ exec_lbu:
     # sw rt, imm(rs)      : Mem32[reg[rs] + imm] = reg[rt]
     # -------------------------------------------------------------------------
 exec_sw:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     addu    $t8, $v0, $t1       # $t8 = endereço simulado
-    jal     sim_to_host         # $v0 = endereço host
+    jal     transfere_sim_para_host         # $v0 = endereço host
     move    $t9, $v0            # salvar endereço host antes do próximo jal
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg             # $v0 = reg[rt]
     sw      $v0, 0($t9)
@@ -588,15 +578,15 @@ exec_sw:
     # sb rt, imm(rs)      : Mem8[reg[rs] + imm] = reg[rt] & 0xFF
     # -------------------------------------------------------------------------
 exec_sb:
-    la      $t0, f_rs
+    la      $t0, inst_rs
     lw      $a0, 0($t0)
     jal     get_reg
-    la      $t0, f_imm
+    la      $t0, inst_imm
     lw      $t1, 0($t0)
     addu    $t8, $v0, $t1
-    jal     sim_to_host
+    jal     transfere_sim_para_host
     move    $t9, $v0
-    la      $t0, f_rt
+    la      $t0, inst_rt
     lw      $a0, 0($t0)
     jal     get_reg
     sb      $v0, 0($t9)
@@ -640,7 +630,7 @@ set_reg_done:
     jr      $ra
 
 ################################################################################
-# sim_to_host - Converte endereço MIPS simulado em endereço host
+# transfere_sim_para_host - Converte endereço MIPS simulado em endereço host
 #
 # Argumento de entrada  : $t8 = endereço simulado
 # Retorno               : $v0 = endereço host correspondente
@@ -652,7 +642,7 @@ set_reg_done:
 #
 # Registradores preservados: $s6, $s7, $a0, $a1, $t8, $t9, $ra
 ################################################################################
-sim_to_host:
+transfere_sim_para_host:
 
     # ---- Segmento de texto --------------------------------------------------
     li      $t0, TEXT_BASE
@@ -706,11 +696,11 @@ sth_erro:
 # carregar_arquivo - Abre um arquivo e lê seus bytes para um buffer
 #
 # Argumentos:
-#   $a0 : ponteiro para nome do arquivo
-#   $a1 : ponteiro para buffer de destino (host)
-#   $a2 : número máximo de bytes
+#   $a0: endereço nome do arquivo
+#   $a1: endereço para buffer de destino (host)
+#   $a2: número máximo de bytes
 # Retorno:
-#   $v0 : bytes lidos (ou -1 se erro ao abrir)
+#   $v0: bytes lidos (ou -1 se erro ao abrir)
 #
 # Syscalls:
 #   13 - open   ($a0=nome, $a1=flags=0, $a2=modo=0) -> $v0=fd
@@ -778,8 +768,8 @@ ca_fim:
 .data
 
 # ---- Nomes dos arquivos de entrada ----------------------------------------
-fname_bin:  .asciiz "ex-000-073.bin"
-fname_dat:  .asciiz "ex-000-073.dat"
+arquivo_bin:  .asciiz "trabalho_01-2026_1.bin"
+arquivo_dat:  .asciiz "trabalho_01-2026_1.dat"
 
 # ---- Segmentos de memória simulados (4 KB cada, alinhados em palavra) -----
         .align 2
@@ -800,17 +790,17 @@ IR:         .word   0           # Instruction Register simulado
 
 # ---- Campos decodificados da instrução corrente ---------------------------
         .align 2
-f_opcode:   .word   0           # bits [31:26]
-f_rs:       .word   0           # bits [25:21]
-f_rt:       .word   0           # bits [20:16]
-f_rd:       .word   0           # bits [15:11]
-f_shamt:    .word   0           # bits [10:6]
-f_funct:    .word   0           # bits [5:0]
-f_imm:      .word   0           # bits [15:0]  com extensão de sinal
-f_addr:     .word   0           # bits [25:0]  campo J-type (sem sinal)
+inst_opcode:   .word   0           # bits [31:26]
+inst_rs:       .word   0           # bits [25:21]
+inst_rt:       .word   0           # bits [20:16]
+inst_rd:       .word   0           # bits [15:11]
+inst_shamt:    .word   0           # bits [10:6]
+inst_funct:    .word   0           # bits [5:0]
+inst_imm:      .word   0           # bits [15:0]  com extensão de sinal
+inst_addr:     .word   0           # bits [25:0]  campo J-type (sem sinal)
 
 # ---- Mensagens de diagnóstico ---------------------------------------------
-msg_unk_op:     .asciiz "\n[SIM] Opcode desconhecido\n"
+msg_opcode_desconhecido:     .asciiz "\n[SIM] Opcode desconhecido\n"
 msg_unk_funct:  .asciiz "\n[SIM] Funct R-type desconhecido\n"
 msg_addr_err:   .asciiz "\n[SIM] Endereco fora dos segmentos simulados\n"
 msg_file_err:   .asciiz "\n[SIM] Erro ao abrir arquivo de entrada\n"
