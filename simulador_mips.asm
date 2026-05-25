@@ -224,445 +224,422 @@ exec_execute:
     la $t0, inst_opcode
     lw $t0, 0($t0)             # $t0 = opcode
 
-    beq     $t0, OP_RTYPE,  exec_rtype
-    beq     $t0, OP_J,      exec_j
-    beq     $t0, OP_JAL,    exec_jal
-    beq     $t0, OP_BEQ,    exec_beq
-    beq     $t0, OP_BNE,    exec_bne
-    beq     $t0, OP_ADDIU,  exec_addiu
-    beq     $t0, OP_ORI,    exec_ori
-    beq     $t0, OP_LUI,    exec_lui
-    beq     $t0, OP_LW,     exec_lw
-    beq     $t0, OP_LBU,    exec_lbu
-    beq     $t0, OP_SB,     exec_sb
-    beq     $t0, OP_SW,     exec_sw
+    beq $t0, OP_RTYPE, exec_rtype
+    beq $t0, OP_J, exec_j
+    beq $t0, OP_JAL, exec_jal
+    beq $t0, OP_BEQ, exec_beq
+    beq $t0, OP_BNE, exec_bne
+    beq $t0, OP_ADDIU, exec_addiu
+    beq $t0, OP_ORI, exec_ori
+    beq $t0, OP_LUI, exec_lui
+    beq $t0, OP_LW, exec_lw
+    beq $t0, OP_LBU, exec_lbu
+    beq $t0, OP_SB, exec_sb
+    beq $t0, OP_SW, exec_sw
 
     # Opcode não reconhecido: imprimir aviso e continuar
-    la      $a0, msg_opcode_desconhecido
-    li      $v0, 4
+    la $a0, msg_opcode_desconhecido
+    li $v0, 4
     syscall
-    j       exec_loop
+    j exec_loop # Volta para o inicio do loop, tentando encontrar mais erros
+##############################################################################
 
-    # =========================================================================
+
+    ####################################
     # R-type: despachar pelo campo funct
-    # =========================================================================
+    ####################################
 exec_rtype:
-    la      $t0, inst_funct
-    lw      $t0, 0($t0)             # $t0 = funct
+    la $t0, inst_funct
+    lw $t0, 0($t0)             # $t0 = funct
 
-    beq     $t0, FUNCT_JR,      exec_jr
-    beq     $t0, FUNCT_SYSCALL, exec_syscall
-    beq     $t0, FUNCT_ADDU,    exec_addu
-    beq     $t0, FUNCT_SUBU,    exec_subu
+    beq $t0, FUNCT_JR, exec_jr
+    beq $t0, FUNCT_SYSCALL, exec_syscall
+    beq $t0, FUNCT_ADDU, exec_addu
+    beq $t0, FUNCT_SUBU, exec_subu
 
     # Funct não reconhecido
-    la      $a0, msg_unk_funct
-    li      $v0, 4
+    la $a0, msg_funct_desconhecido
+    li $v0, 4
     syscall
-    j       exec_loop
+    j exec_loop # Tenta encontrar mais erros
 
-    # =========================================================================
+    ############################################
     # Implementação individual de cada instrução
-    # =========================================================================
+    ############################################
 
-    # -------------------------------------------------------------------------
-    # jr rs               : PC = reg[rs]
-    # -------------------------------------------------------------------------
+    # ----- jr rs : PC = reg[rs] -----
 exec_jr:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rs]
-    sw      $v0, 0($s7)         # PC = reg[rs]
-    j       exec_loop
+    la $t0, inst_rs        # Carrega o endereço do 'rs' 
+    lw  $a0, 0($t0)         # Pega o valor do 'rs'
+    jal get_reg             # $v0 = reg[rs] (pega o valor do registrador no índice 'rs')
+    sw $v0, 0($s7)         # PC = reg[rs]
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # syscall             : verificar reg[2] e executar o serviço
-    # -------------------------------------------------------------------------
+    # ----- syscall : verificar reg[2] (v0) e executar o serviço -----
 exec_syscall:
-    li      $a0, IDX_V0
-    jal     get_reg             # $v0 = reg[2] (código de serviço)
-    move    $t0, $v0
+    li $a0, IDX_V0
+    jal get_reg             # $v0 = reg[2] (código de serviço)
+    move $t0, $v0           # $t0 toma o valor de $v0 (pseudoinstrucao)
 
-    beq     $t0, SVC_PRINT_INT,  svc_print_int
-    beq     $t0, SVC_PRINT_STR,  svc_print_str
-    beq     $t0, SVC_READ_INT,   svc_read_int
-    beq     $t0, SVC_READ_STR,   svc_read_str
-    beq     $t0, SVC_EXIT,       svc_exit
-    beq     $t0, SVC_PRINT_CHAR, svc_print_char
-    beq     $t0, SVC_EXIT2,      svc_exit2
+    beq $t0, SVC_PRINT_INT, svc_print_int
+    beq $t0, SVC_PRINT_STR, svc_print_str
+    beq $t0, SVC_READ_INT, svc_read_int
+    beq $t0, SVC_READ_STR, svc_read_str
+    beq $t0, SVC_EXIT, svc_exit
+    beq $t0, SVC_PRINT_CHAR, svc_print_char
+    beq $t0, SVC_EXIT2, svc_exit2
 
-    j       exec_loop           # serviço desconhecido: ignorar
+    j exec_loop           # Ignorar serviço desconhecido mas continuar
 
-    # ---- Serviço 1: print_int -----------------------------------------------
+    # ---- Serviço 1: print_int
 svc_print_int:
-    li      $a0, IDX_A0
-    jal     get_reg
-    move    $a0, $v0
-    li      $v0, 1
-    syscall
-    j       exec_loop
+    li $a0, IDX_A0
+    jal get_reg
+    move $a0, $v0          # Printa o inteiro em $a0
+    li $v0, 1              # Serviço 1
+    syscall 
+    j exec_loop
 
-    # ---- Serviço 4: print_string --------------------------------------------
+    # ---- Serviço 4: print_string
 svc_print_str:
-    li      $a0, IDX_A0
-    jal     get_reg             # $v0 = endereço simulado da string
-    move    $t8, $v0
-    jal     transfere_sim_para_host         # $v0 = endereço host
-    move    $a0, $v0
-    li      $v0, 4
+    li $a0, IDX_A0
+    jal get_reg                         # $v0 = endereço simulado da string
+    move $t8, $v0
+    jal transfere_sim_para_host         # $v0 = endereço host
+    move $a0, $v0                       # Printa o char com endereço em a0
+    li $v0, 4                           # Serviço 4
     syscall
-    j       exec_loop
+    j exec_loop
 
-    # ---- Serviço 5: read_int ------------------------------------------------
+    # ---- Serviço 5: read_int
 svc_read_int:
-    li      $v0, 5
+    li $v0, 5               # Serviço 5
     syscall
-    li      $a0, IDX_V0
-    move    $a1, $v0
-    jal     set_reg             # reg[2] = inteiro lido
-    j       exec_loop
+    li $a0, IDX_V0
+    move $a1, $v0           # $v0 tem o int lido, vai pra $a1 pra ser passado por função
+    jal set_reg             # reg[2] = inteiro lido
+    j exec_loop
 
-    # ---- Serviço 8: read_string ---------------------------------------------
+    # ---- Serviço 8: read_string
 svc_read_str:
-    li      $a0, IDX_A0
-    jal     get_reg
-    move    $t8, $v0
-    jal     transfere_sim_para_host
-    move    $t9, $v0            # $t9 = endereço host do buffer
-    li      $a0, IDX_A1
-    jal     get_reg             # $v0 = tamanho (reg[5])
-    move    $a1, $v0
-    move    $a0, $t9
-    li      $v0, 8
+    li $a0, IDX_A0
+    jal get_reg
+    move $t8, $v0
+    jal transfere_sim_para_host
+    move $t9, $v0                # $t9 = endereço host do buffer
+    li $a0, IDX_A1
+    jal get_reg                  # $v0 = tamanho (reg[5])
+    move $a1, $v0                # $a1 tem o numero de caracteres da string
+    move $a0, $t9                # $a0 precisa ter o endereço do input buffer
+    li $v0, 8                    # Serviço 8
     syscall
-    j       exec_loop
+    j exec_loop
 
-    # ---- Serviço 10: exit ---------------------------------------------------
+    # ---- Serviço 10: exit
 svc_exit:
-    li      $v0, 10
+    li $v0, 10         # Serviço 10
     syscall
 
-    # ---- Serviço 11: print_char ---------------------------------------------
+    # ---- Serviço 11: print_char
 svc_print_char:
-    li      $a0, IDX_A0
-    jal     get_reg
-    move    $a0, $v0
-    li      $v0, 11
+    li $a0, IDX_A0
+    jal get_reg
+    move $a0, $v0        # Caractere pra printar
+    li $v0, 11           # Serviço 11
     syscall
-    j       exec_loop
+    j exec_loop
 
-    # ---- Serviço 17: exit2 --------------------------------------------------
+    # ---- Serviço 17: exit2
 svc_exit2:
-    li      $a0, IDX_A0
-    jal     get_reg
-    move    $a0, $v0
-    li      $v0, 17
+    li $a0, IDX_A0
+    jal get_reg
+    move $a0, $v0        # Termina com o valor de $a0
+    li $v0, 17           # Serviço 17
     syscall
 
-    # -------------------------------------------------------------------------
-    # addu rd, rs, rt : reg[rd] = reg[rs] + reg[rt]
-    # -------------------------------------------------------------------------
+    # ----- addu rd, rs, rt : reg[rd] = reg[rs] + reg[rt] -----
 exec_addu:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0            # $t1 = reg[rs]
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rt]
-    addu    $t1, $t1, $v0
-    la      $t0, inst_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    move $t1, $v0               # $t1 = reg[rs]
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    jal get_reg            
+    move $t2, $v0               # $t2 = reg[rs]
+    addu $t1, $t1, $t2
+    la $t0, inst_rd
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg                 # $a0 = conteúdo do inst_rd | $a1 = reg[rs] + reg[rs]
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # subu rd, rs, rt : reg[rd] = reg[rs] - reg[rt]
-    # -------------------------------------------------------------------------
+    # ----- subu rd, rs, rt : reg[rd] = reg[rs] - reg[rt] -----
 exec_subu:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    subu    $t1, $t1, $v0
-    la      $t0, inst_rd
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    # Parecido com o 'addu', mas agora com subtração
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    move $t1, $v0
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    jal get_reg
+    move $t2, $v0
+    subu $t1, $t1, $t2
+    la $t0, inst_rd
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # j target            : PC = (PC_atual[31:28] | (target << 2))
-    # Nota: PC já foi incrementado no Decode; usamos esse valor para extrair
-    # os 4 bits superiores (conforme especificação MIPS).
-    # -------------------------------------------------------------------------
+    # ----- j target : PC = (PC_atual[31-28] | (target << 2)) -----
+    # Nota: PC já foi incrementado no Decode, usamos esse valor para extrair os 4 bits superiores
 exec_j:
-    la      $t0, inst_addr
-    lw      $t0, 0($t0)         # $t0 = campo target (26 bits)
-    sll     $t0, $t0, 2         # $t0 = target * 4
-    lw      $t1, 0($s7)         # $t1 = PC (após incremento)
-    li      $t2, 0xF0000000
-    and     $t1, $t1, $t2       # $t1 = PC[31:28]
-    or      $t0, $t1, $t0       # endereço de destino
-    sw      $t0, 0($s7)         # PC = endereço de destino
-    j       exec_loop
+    la $t0, inst_addr
+    lw $t0, 0($t0)         # $t0 = campo target (26 bits)
+    sll $t0, $t0, 2        # $t0 = target * 4
+    lw $t1, 0($s7)         # $t1 = PC (após incremento)
+    li $t2, 0xF0000000
+    and $t1, $t1, $t2      # $t1 = PC[31-28]
+    or $t0, $t1, $t0       # endereço de destino
+    sw $t0, 0($s7)         # PC = endereço de destino
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # jal target          : reg[31] = PC;  PC = (PC[31:28] | (target << 2))
-    # -------------------------------------------------------------------------
+    # ----- jal target : reg[31] = PC;  PC = (PC[31-28] | (target << 2)) -----
 exec_jal:
     # 1. Salvar endereço de retorno em reg[31]
-    lw      $t9, 0($s7)         # $t9 = PC (após incremento) = endereço de retorno
-    li      $a0, IDX_RA
-    move    $a1, $t9
-    jal     set_reg             # reg[31] = endereço de retorno
+    lw $t9, 0($s7)         # $t9 = PC (após incremento) = endereço de retorno
+    li $a0, IDX_RA
+    move $a1, $t9
+    jal set_reg            # reg[31] = endereço de retorno
 
     # 2. Calcular endereço de desvio (mesmo cálculo que j)
-    la      $t0, inst_addr
-    lw      $t0, 0($t0)         # $t0 = target (26 bits)
-    sll     $t0, $t0, 2
-    lw      $t1, 0($s7)         # PC atual (depois de set_reg, s7 não mudou)
-    li      $t2, 0xF0000000
-    and     $t1, $t1, $t2
-    or      $t0, $t1, $t0
-    sw      $t0, 0($s7)
-    j       exec_loop
+    la $t0, inst_addr
+    lw $t0, 0($t0)         # $t0 = target (26 bits)
+    sll $t0, $t0, 2
+    lw $t1, 0($s7)         # PC atual (depois de set_reg, s7 não mudou)
+    li $t2, 0xF0000000
+    and $t1, $t1, $t2
+    or $t0, $t1, $t0
+    sw $t0, 0($s7)
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # beq rs, rt, offset  : if (reg[rs] == reg[rt]) PC = PC + (offset << 2)
-    # -------------------------------------------------------------------------
+    # ----- beq rs, rt, offset : if (reg[rs] == reg[rt]) PC = PC + (offset << 2) -----
 exec_beq:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0            # $t1 = reg[rs]
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rt]
-    bne     $t1, $v0, exec_loop # condição falsa: sem branch
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    move $t1, $v0            # $t1 = reg[rs]
+    la $t0, inst_rt
+    lw  $a0, 0($t0)
+    jal get_reg              # $v0 = reg[rt]
+    bne $t1, $v0, exec_loop  # condição falsa: sem branch
     # Branch tomado
-    la      $t0, inst_imm
-    lw      $t0, 0($t0)         # $t0 = offset com sinal
-    sll     $t0, $t0, 2
-    lw      $t1, 0($s7)
-    addu    $t1, $t1, $t0
-    sw      $t1, 0($s7)
-    j       exec_loop
+    la $t0, inst_imm
+    lw  $t0, 0($t0)          # $t0 = offset com sinal
+    sll $t0, $t0, 2
+    lw $t1, 0($s7)
+    addu $t1, $t1, $t0
+    sw $t1, 0($s7)
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # bne rs, rt, offset  : if (reg[rs] != reg[rt]) PC = PC + (offset << 2)
-    # -------------------------------------------------------------------------
+    # ----- bne rs, rt, offset : if (reg[rs] != reg[rt]) PC = PC + (offset << 2) -----
 exec_bne:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    move    $t1, $v0
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    beq     $t1, $v0, exec_loop # condição falsa: sem branch
-    la      $t0, inst_imm
-    lw      $t0, 0($t0)
-    sll     $t0, $t0, 2
-    lw      $t1, 0($s7)
-    addu    $t1, $t1, $t0
-    sw      $t1, 0($s7)
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    move $t1, $v0
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    jal get_reg
+    beq $t1, $v0, exec_loop    # condição falsa: sem branch
+    la $t0, inst_imm
+    lw $t0, 0($t0)
+    sll $t0, $t0, 2
+    lw $t1, 0($s7)
+    addu $t1, $t1, $t0
+    sw $t1, 0($s7)
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # addiu rt, rs, imm : reg[rt] = reg[rs] + sign_ext(imm)
-    # -------------------------------------------------------------------------
+    # ----- addiu rt, rs, imm : reg[rt] = reg[rs] + sign_ext(imm) -----
 exec_addiu:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rs]
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)         # $t1 = imm (extensão de sinal já feita no decode)
-    addu    $t1, $v0, $t1
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg             # $v0 = reg[rs]
+    la $t0, inst_imm
+    lw $t1, 0($t0)          # $t1 = imm (extensão de sinal já feita no decode)
+    addu $t1, $v0, $t1
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # ori rt, rs, imm     : reg[rt] = reg[rs] | zero_ext(imm)
-    # -------------------------------------------------------------------------
+    # ----- ori rt, rs, imm : reg[rt] = reg[rs] | zero_ext(imm) -----
 exec_ori:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    andi    $t1, $t1, 0xFFFF    # zero-extension
-    or      $t1, $v0, $t1
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    andi $t1, $t1, 0xFFFF    # zero-extension
+    or $t1, $v0, $t1
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # lui rt, imm         : reg[rt] = imm << 16
-    # -------------------------------------------------------------------------
+    # ----- lui rt, imm : reg[rt] = imm << 16 -----
 exec_lui:
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    andi    $t1, $t1, 0xFFFF
-    sll     $t1, $t1, 16
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    andi $t1, $t1, 0xFFFF
+    sll $t1, $t1, 16
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # lw rt, imm(rs)      : reg[rt] = Mem32[reg[rs] + imm]
-    # -------------------------------------------------------------------------
+    # ----- lw rt, imm(rs) : reg[rt] = Mem32[reg[rs] + imm] -----
 exec_lw:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    addu    $t8, $v0, $t1       # $t8 = endereço simulado
-    jal     transfere_sim_para_host         # $v0 = endereço host
-    lw      $t1, 0($v0)
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    addu $t8, $v0, $t1                  # $t8 = endereço simulado
+    jal transfere_sim_para_host         # $v0 = endereço host
+    lw $t1, 0($v0)
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # lbu rt, imm(rs)     : reg[rt] = zero_ext(Mem8[reg[rs] + imm])
-    # -------------------------------------------------------------------------
+    # ----- lbu rt, imm(rs) : reg[rt] = zero_ext(Mem8[reg[rs] + imm]) -----
 exec_lbu:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    addu    $t8, $v0, $t1
-    jal     transfere_sim_para_host
-    lbu     $t1, 0($v0)
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    move    $a1, $t1
-    jal     set_reg
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    addu $t8, $v0, $t1
+    jal transfere_sim_para_host
+    lbu $t1, 0($v0)
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    move $a1, $t1
+    jal set_reg
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # sw rt, imm(rs)      : Mem32[reg[rs] + imm] = reg[rt]
-    # -------------------------------------------------------------------------
+    # ----- sw rt, imm(rs) : Mem32[reg[rs] + imm] = reg[rt] -----
 exec_sw:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    addu    $t8, $v0, $t1       # $t8 = endereço simulado
-    jal     transfere_sim_para_host         # $v0 = endereço host
-    move    $t9, $v0            # salvar endereço host antes do próximo jal
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg             # $v0 = reg[rt]
-    sw      $v0, 0($t9)
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    addu $t8, $v0, $t1                  # $t8 = endereço simulado
+    jal transfere_sim_para_host         # $v0 = endereço host
+    move $t9, $v0                       # salvar endereço host antes do próximo jal
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    jal get_reg                         # $v0 = reg[rt]
+    sw $v0, 0($t9)
+    j exec_loop
 
-    # -------------------------------------------------------------------------
-    # sb rt, imm(rs)      : Mem8[reg[rs] + imm] = reg[rt] & 0xFF
-    # -------------------------------------------------------------------------
+    # ----- sb rt, imm(rs) : Mem8[reg[rs] + imm] = reg[rt] & 0xFF -----
 exec_sb:
-    la      $t0, inst_rs
-    lw      $a0, 0($t0)
-    jal     get_reg
-    la      $t0, inst_imm
-    lw      $t1, 0($t0)
-    addu    $t8, $v0, $t1
-    jal     transfere_sim_para_host
-    move    $t9, $v0
-    la      $t0, inst_rt
-    lw      $a0, 0($t0)
-    jal     get_reg
-    sb      $v0, 0($t9)
-    j       exec_loop
+    la $t0, inst_rs
+    lw $a0, 0($t0)
+    jal get_reg
+    la $t0, inst_imm
+    lw $t1, 0($t0)
+    addu $t8, $v0, $t1
+    jal transfere_sim_para_host
+    move $t9, $v0
+    la $t0, inst_rt
+    lw $a0, 0($t0)
+    jal get_reg
+    sb $v0, 0($t9)
+    j exec_loop
 
 
-################################################################################
+#####################################################
 # get_reg - Lê o valor de um registrador simulado
 #
 # Argumentos:
-#   $a0 : índice do registrador (0..31)
+#   $a0 : índice do registrador (0-31)
 # Retorno:
-#   $v0 : valor de reg[$a0]   (reg[0] sempre retorna 0)
+#   $v0 : valor de reg[$a0] (reg[0] sempre retorna 0)
 # Registradores preservados: $s6, $s7, $t5-$t9, $a0-$a3
-################################################################################
+######################################################
 get_reg:
-    beqz    $a0, get_reg_zero
-    sll     $t0, $a0, 2         # offset = índice * 4
-    addu    $t0, $s6, $t0       # endereço host = base_reg + offset
-    lw      $v0, 0($t0)
-    jr      $ra
+    beqz $a0, get_reg_zero
+    sll $t0, $a0, 2          # offset = índice * 4
+    addu $t0, $s6, $t0       # endereço host = base_reg + offset
+    lw $v0, 0($t0)
+    jr $ra
 get_reg_zero:
-    li      $v0, 0
-    jr      $ra
+    li $v0, 0
+    jr $ra
 
-################################################################################
+#####################################################
 # set_reg - Escreve em um registrador simulado
 #
 # Argumentos:
-#   $a0 : índice do registrador (0..31)
+#   $a0 : índice do registrador (0-31)
 #   $a1 : valor a gravar
-# Nota: reg[0] é imutável (escrita ignorada)
+# Nota: reg[0] é imutável (escrita ignorada), sempre zero
 # Registradores preservados: $s6, $s7, $t5-$t9, $a0-$a3
-################################################################################
+#######################################################
 set_reg:
-    beqz    $a0, set_reg_done
-    sll     $t0, $a0, 2
-    addu    $t0, $s6, $t0
-    sw      $a1, 0($t0)
+    beqz $a0, set_reg_done
+    sll $t0, $a0, 2
+    addu $t0, $s6, $t0
+    sw $a1, 0($t0)
 set_reg_done:
-    jr      $ra
+    jr $ra
 
-################################################################################
+############################################################################
 # transfere_sim_para_host - Converte endereço MIPS simulado em endereço host
 #
-# Argumento de entrada  : $t8 = endereço simulado
-# Retorno               : $v0 = endereço host correspondente
+# Argumentos: 
+#   $t8 : endereço simulado
+# Retorno: 
+#   $v0 : endereço host correspondente
 #
 # Mapeamento de segmentos:
-#   Texto : [TEXT_BASE,  TEXT_BASE  + MEM_SIZE)  ->  mem_text[0..]
-#   Dados : [DATA_BASE,  DATA_BASE  + MEM_SIZE)  ->  mem_data[0..]
-#   Pilha : [STACK_TOP - MEM_SIZE + 4, STACK_TOP] -> mem_stack[0..]
+#   Texto : [TEXT_BASE, TEXT_BASE + MEM_SIZE)
+#   Dados : [DATA_BASE, DATA_BASE + MEM_SIZE)
+#   Pilha : [STACK_TOP - MEM_SIZE + 4, STACK_TOP]
 #
 # Registradores preservados: $s6, $s7, $a0, $a1, $t8, $t9, $ra
-################################################################################
+############################################################################
 transfere_sim_para_host:
 
-    # ---- Segmento de texto --------------------------------------------------
-    li      $t0, TEXT_BASE
-    subu    $t1, $t8, $t0       # offset = addr - TEXT_BASE
-    bltz    $t1, sth_data       # offset < 0 -> não é texto
-    li      $t2, MEM_SIZE
-    subu    $t3, $t1, $t2       # offset - MEM_SIZE
-    bgez    $t3, sth_data       # offset >= MEM_SIZE -> não é texto
-    la      $v0, mem_text
-    addu    $v0, $v0, $t1
-    jr      $ra
+    # ---- Segmento de texto ----
+transfere_sim_para_host_texto:
+    li $t0, TEXT_BASE                            # Carrega 0x00400000
+    subu $t1, $t8, $t0                           # offset = addr - TEXT_BASE
+    bltz $t1, transfere_sim_para_host_data       # offset < 0 , não é texto
+    li $t2, MEM_SIZE
+    subu $t3, $t1, $t2                           # offset - MEM_SIZE
+    bgez $t3, transfere_sim_para_host_data       # offset >= MEM_SIZE , não é texto
+    la $v0, mem_text
+    addu $v0, $v0, $t1
+    jr $ra
 
-    # ---- Segmento de dados --------------------------------------------------
-sth_data:
-    li      $t0, DATA_BASE
+    # ---- Segmento de dados ----
+transfere_sim_para_host_data:
+    li      $t0, DATA_BASE                       # Carrega 0x10010000
     subu    $t1, $t8, $t0
-    bltz    $t1, sth_stack
+    bltz    $t1, transfere_sim_para_host_pilha
     li      $t2, MEM_SIZE
     subu    $t3, $t1, $t2
-    bgez    $t3, sth_stack
+    bgez    $t3, transfere_sim_para_host_pilha
     la      $v0, mem_data
     addu    $v0, $v0, $t1
     jr      $ra
@@ -670,14 +647,12 @@ sth_data:
     # ---- Segmento de pilha --------------------------------------------------
     # A pilha cresce para baixo a partir de STACK_TOP.
     # Base inferior do bloco mapeado = STACK_TOP - MEM_SIZE + 4
-sth_stack:
-    li      $t0, 0x7FFF
-    sll     $t0, $t0, 16
-    ori     $t0, $t0, 0xEFFC    # $t0 = STACK_TOP = 0x7FFFEFFC
+transfere_sim_para_host_pilha:
+    li      $t0, STACK_TOP                # Carrega 0x7FFFEFFC
     li      $t2, MEM_SIZE
     subu    $t3, $t0, $t2
-    addiu   $t3, $t3, 4         # $t3 = base inferior
-    subu    $t1, $t8, $t3       # offset = addr - base_inferior
+    addiu   $t3, $t3, 4                    # $t3 = base inferior
+    subu    $t1, $t8, $t3                 # offset = addr - base_inferior
     bltz    $t1, sth_erro
     subu    $t4, $t1, $t2
     bgez    $t4, sth_erro
@@ -800,7 +775,7 @@ inst_imm:      .word   0           # bits [15:0]  com extensão de sinal
 inst_addr:     .word   0           # bits [25:0]  campo J-type (sem sinal)
 
 # ---- Mensagens de diagnóstico ---------------------------------------------
-msg_opcode_desconhecido:     .asciiz "\n[SIM] Opcode desconhecido\n"
-msg_unk_funct:  .asciiz "\n[SIM] Funct R-type desconhecido\n"
+msg_opcode_desconhecido:     .asciiz "\nOpcode desconhecido\n"
+msg_funct_desconhecido:  .asciiz "\n[SIM] Funct R-type desconhecido\n"
 msg_addr_err:   .asciiz "\n[SIM] Endereco fora dos segmentos simulados\n"
 msg_file_err:   .asciiz "\n[SIM] Erro ao abrir arquivo de entrada\n"
