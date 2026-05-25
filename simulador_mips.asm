@@ -603,8 +603,14 @@ set_reg:
 set_reg_done:
     jr $ra
 
-############################################################################
-# transfere_sim_para_host - Converte endereço MIPS simulado em endereço host
+###############################################################################
+# transfere_sim_para_host - Converte endereço MIPS simulado em endereço host,
+#                           serve para texto, dados e pilha, ele verifica os 3.
+#
+# Testa e verifica se o endereço simulado é um dos 3:
+#   1. Endereço de texto simulado
+#   2. Endereço de dados simulado
+#   3. Endereço de pilha simulado
 #
 # Argumentos: 
 #   $t8 : endereço simulado
@@ -617,7 +623,7 @@ set_reg_done:
 #   Pilha : [STACK_TOP - MEM_SIZE + 4, STACK_TOP]
 #
 # Registradores preservados: $s6, $s7, $a0, $a1, $t8, $t9, $ra
-############################################################################
+###############################################################################
 transfere_sim_para_host:
 
     # ---- Segmento de texto ----
@@ -628,154 +634,161 @@ transfere_sim_para_host_texto:
     li $t2, MEM_SIZE
     subu $t3, $t1, $t2                           # offset - MEM_SIZE
     bgez $t3, transfere_sim_para_host_data       # offset >= MEM_SIZE , não é texto
+    
+    # É uma tradução de endereço de texto, então pegamos o endereço real de host
     la $v0, mem_text
     addu $v0, $v0, $t1
     jr $ra
 
     # ---- Segmento de dados ----
 transfere_sim_para_host_data:
-    li      $t0, DATA_BASE                       # Carrega 0x10010000
-    subu    $t1, $t8, $t0
-    bltz    $t1, transfere_sim_para_host_pilha
-    li      $t2, MEM_SIZE
-    subu    $t3, $t1, $t2
-    bgez    $t3, transfere_sim_para_host_pilha
-    la      $v0, mem_data
-    addu    $v0, $v0, $t1
-    jr      $ra
+    li $t0, DATA_BASE                       # Carrega 0x10010000
 
-    # ---- Segmento de pilha --------------------------------------------------
-    # A pilha cresce para baixo a partir de STACK_TOP.
+    # Verifica se está dentro do range de dados (já testamos se estava no range de texto)
+    subu $t1, $t8, $t0
+    bltz $t1, transfere_sim_para_host_pilha
+    li $t2, MEM_SIZE
+    subu $t3, $t1, $t2
+    bgez $t3, transfere_sim_para_host_pilha
+
+    # É uma tradução de endereço de dados, então pegamos o endereço real de host
+    la $v0, mem_data
+    addu $v0, $v0, $t1
+    jr $ra
+
+    # ---- Segmento de pilha ----
+    # A pilha cresce para baixo a partir de STACK_TOP
     # Base inferior do bloco mapeado = STACK_TOP - MEM_SIZE + 4
 transfere_sim_para_host_pilha:
-    li      $t0, STACK_TOP                # Carrega 0x7FFFEFFC
-    li      $t2, MEM_SIZE
-    subu    $t3, $t0, $t2
-    addiu   $t3, $t3, 4                    # $t3 = base inferior
-    subu    $t1, $t8, $t3                 # offset = addr - base_inferior
-    bltz    $t1, sth_erro
-    subu    $t4, $t1, $t2
-    bgez    $t4, sth_erro
-    la      $v0, mem_stack
-    addu    $v0, $v0, $t1
-    jr      $ra
+    li $t0, STACK_TOP                    # Carrega 0x7FFFEFFC
+    li $t2, MEM_SIZE
+    subu $t3, $t0, $t2
+    addiu $t3, $t3, 4                    # $t3 = base inferior
+    subu $t1, $t8, $t3                   # offset = addr - base_inferior
+    bltz $t1, sim_para_host_erro
+    subu $t4, $t1, $t2
+    bgez $t4, sim_para_host_erro
+    la $v0, mem_stack
+    addu $v0, $v0, $t1
+    jr $ra
 
-sth_erro:
-    la      $a0, msg_addr_err
-    li      $v0, 4
+sim_para_host_erro:
+    la $a0, msg_erro_de_endereco
+    li $v0, 4
     syscall
-    la      $v0, mem_text       # retornar ponteiro seguro para não travar
-    jr      $ra
+    la $v0, mem_text         # retornar ponteiro seguro para não travar
+    jr $ra
 
-################################################################################
+####################################################################
 # carregar_arquivo - Abre um arquivo e lê seus bytes para um buffer
 #
 # Argumentos:
-#   $a0: endereço nome do arquivo
-#   $a1: endereço para buffer de destino (host)
-#   $a2: número máximo de bytes
+#   $a0 : endereço nome do arquivo
+#   $a1 : endereço para buffer de destino (host)
+#   $a2 : número máximo de bytes
 # Retorno:
-#   $v0: bytes lidos (ou -1 se erro ao abrir)
+#   $v0 : bytes lidos (ou -1 se erro ao abrir)
 #
 # Syscalls:
-#   13 - open   ($a0=nome, $a1=flags=0, $a2=modo=0) -> $v0=fd
-#   14 - read   ($a0=fd, $a1=buffer, $a2=nbytes)    -> $v0=bytes_lidos
-#   16 - close  ($a0=fd)
-################################################################################
+#   13 - open ($a0=nome, $a1=flags, $a2=modo) -> $v0=fd
+#   14 - read ($a0=fd, $a1=buffer, $a2=nbytes) -> $v0=bytes_lidos
+#   16 - close ($a0=fd)
+####################################################################
 carregar_arquivo:
-    addiu   $sp, $sp, -24
-    sw      $ra, 20($sp)
-    sw      $s0, 16($sp)
-    sw      $s1, 12($sp)
-    sw      $s2,  8($sp)
-    sw      $s3,  4($sp)
-    sw      $s4,  0($sp)
+    addiu $sp, $sp, -24
+    sw $ra, 20($sp)
+    sw $s0, 16($sp)
+    sw $s1, 12($sp)
+    sw $s2, 8($sp)
+    sw $s3, 4($sp)
+    sw $s4, 0($sp)
 
-    move    $s0, $a0            # nome
-    move    $s1, $a1            # buffer
-    move    $s2, $a2            # max bytes
+    move $s0, $a0            # nome
+    move $s1, $a1            # buffer
+    move $s2, $a2            # max bytes
 
     # Abrir arquivo (modo leitura = 0)
-    li      $v0, 13
-    move    $a0, $s0
-    li      $a1, 0
-    li      $a2, 0
+    li $v0, 13
+    move $a0, $s0
+    li $a1, 0
+    li $a2, 0
     syscall
-    move    $s3, $v0            # $s3 = file descriptor
+    move $s3, $v0            # $s3 = descritor de file
 
-    bltz    $s3, ca_erro
+    bltz $s3, copiar_arquivo_erro
 
     # Ler bytes
-    li      $v0, 14
-    move    $a0, $s3
-    move    $a1, $s1
-    move    $a2, $s2
+    li $v0, 14
+    move $a0, $s3
+    move $a1, $s1
+    move $a2, $s2
     syscall
-    move    $s4, $v0            # $s4 = bytes lidos
+    move $s4, $v0            # $s4 = bytes lidos
 
     # Fechar arquivo
-    li      $v0, 16
-    move    $a0, $s3
+    li $v0, 16
+    move $a0, $s3
     syscall
 
-    move    $v0, $s4
-    j       ca_fim
+    move $v0, $s4
+    j copiar_arquivo_fim
 
-ca_erro:
-    la      $a0, msg_file_err
-    li      $v0, 4
+copiar_arquivo_erro:
+    la $a0, msg_erro_de_arquivo
+    li $v0, 4
     syscall
-    li      $v0, -1
+    li $v0, -1
 
-ca_fim:
-    lw      $s0, 16($sp)
-    lw      $s1, 12($sp)
-    lw      $s2,  8($sp)
-    lw      $s3,  4($sp)
-    lw      $s4,  0($sp)
-    lw      $ra, 20($sp)
-    addiu   $sp, $sp, 24
-    jr      $ra
+copiar_arquivo_fim:
+    lw $s0, 16($sp)
+    lw $s1, 12($sp)
+    lw $s2, 8($sp)
+    lw $s3, 4($sp)
+    lw $s4, 0($sp)
+    lw $ra, 20($sp)
+    addiu $sp, $sp, 24
+    jr $ra
 
-# ===========================================================================
+##############################
 # Seção de dados do simulador
-# ===========================================================================
+##############################
 .data
 
-# ---- Nomes dos arquivos de entrada ----------------------------------------
-arquivo_bin:  .asciiz "trabalho_01-2026_1.bin"
-arquivo_dat:  .asciiz "trabalho_01-2026_1.dat"
+# ---- Nomes dos arquivos de entrada ----
+arquivo_bin: .asciiz "trabalho_01-2026_1.bin"
+arquivo_dat: .asciiz "trabalho_01-2026_1.dat"
 
-# ---- Segmentos de memória simulados (4 KB cada, alinhados em palavra) -----
-        .align 2
-mem_text:   .space  4096        # texto  - instruções do programa simulado
-        .align 2
-mem_data:   .space  4096        # dados  - variáveis estáticas
-        .align 2
-mem_stack:  .space  4096        # pilha  - cresce para endereços menores
+# ---- Segmentos de memória simulados (4 KB cada, alinhados em palavra) ----
+# '.align 2' aqui para garantir que as strings dos nomes dos arquivos não quebrem o espaçamento de 4 bytes
+.align 2
+mem_text: .space 4096         # texto - instruções do programa, simulado
+.align 2
+mem_data: .space 4096         # dados - variáveis estáticas, simulado
+.align 2
+mem_stack: .space 4096        # pilha - cresce para endereços menores, simulado
 
-# ---- Banco de registradores simulados: 32 x 4 bytes -----------------------
-        .align 2
-reg:        .space  128         # reg[0] .. reg[31]
+# ---- Banco de registradores simulados: 32 x 4 bytes ----
+.align 2
+reg: .space 128               # reg[0] ao reg[31]
 
-# ---- Registradores internos -----------------------------------------------
-        .align 2
-PC:         .word   0           # Program Counter simulado
-IR:         .word   0           # Instruction Register simulado
+# ---- Registradores internos ----
+.align 2
+PC: .word 0           # Program Counter simulado
+IR: .word 0           # Instruction Register simulado
 
-# ---- Campos decodificados da instrução corrente ---------------------------
-        .align 2
-inst_opcode:   .word   0           # bits [31:26]
-inst_rs:       .word   0           # bits [25:21]
-inst_rt:       .word   0           # bits [20:16]
-inst_rd:       .word   0           # bits [15:11]
-inst_shamt:    .word   0           # bits [10:6]
-inst_funct:    .word   0           # bits [5:0]
-inst_imm:      .word   0           # bits [15:0]  com extensão de sinal
-inst_addr:     .word   0           # bits [25:0]  campo J-type (sem sinal)
+# ---- Campos decodificados da instrução atual ----
+.align 2
+inst_opcode: .word 0       # bits [31:26]
+inst_rs: .word 0           # bits [25:21]
+inst_rt: .word 0           # bits [20:16]
+inst_rd: .word 0           # bits [15:11]
+inst_shamt: .word 0        # bits [10:6]
+inst_funct: .word 0        # bits [5:0]
+inst_imm: .word 0          # bits [15:0]  com extensão de sinal
+inst_addr: .word 0         # bits [25:0]  campo J-type (sem sinal)
 
-# ---- Mensagens de diagnóstico ---------------------------------------------
-msg_opcode_desconhecido:     .asciiz "\nOpcode desconhecido\n"
-msg_funct_desconhecido:  .asciiz "\n[SIM] Funct R-type desconhecido\n"
-msg_addr_err:   .asciiz "\n[SIM] Endereco fora dos segmentos simulados\n"
-msg_file_err:   .asciiz "\n[SIM] Erro ao abrir arquivo de entrada\n"
+# ---- Mensagens de diagnóstico ----
+msg_opcode_desconhecido: .asciiz "\nOpcode desconhecido\n"
+msg_funct_desconhecido: .asciiz "\nFunct R-type desconhecido\n"
+msg_erro_de_endereco: .asciiz "\nEndereco fora dos segmentos simulados\n"
+msg_erro_de_arquivo: .asciiz "\nErro ao abrir arquivo de entrada\n"
