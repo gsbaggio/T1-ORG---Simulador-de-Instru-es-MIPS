@@ -58,19 +58,6 @@ O laço principal deve repetir os passos abaixo até encontrar um `syscall` de e
 
 A lógica de execução deve implementar o seguinte *Instruction Set*:
 
-* **Aritméticas:** `add`, `sub`, `addi`.
-
-
-* **Lógicas:** `and`, `or`, `andi`, `ori`.
-
-
-* **Acesso à Memória:** `lw`, `sw`.
-
-
-* **Desvios e Saltos:** `beq`, `bne`, `j`.
-
-
-* **Shifts e Sistema:** `sll`, `srl`, `syscall`.
-
+* addu, subu, jr, syscall, addiu, ori, lui, lw, sw, lbu, sb, beq, bne.
 
 * **Comportamento do Syscall:** O simulador deve ler o valor do próprio registrador `$v0` (no caso, `reg[2]`) e executar serviços de saída: código `1` (exit padrão) e código `10` (exit 2).
